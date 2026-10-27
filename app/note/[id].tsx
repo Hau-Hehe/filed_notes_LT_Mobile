@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,15 +8,16 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { Note } from "../../src/types";
 import { StorageService } from "../../src/services/storage";
 import { SyncEngine } from "../../src/services/syncEngine";
+import { getDeviceLocation, hasValidCoordinates } from "../../src/services/location";
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,6 +31,16 @@ export default function NoteDetailScreen() {
     { latitude: number; longitude: number } | undefined
   >();
   const [noteObj, setNoteObj] = useState<Note | null>(null);
+  const [locating, setLocating] = useState(false);
+  const locatingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const routeIdRef = useRef(id);
+  useLayoutEffect(() => { routeIdRef.current = id; }, [id]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!isNew) {
@@ -41,16 +52,16 @@ export default function NoteDetailScreen() {
           setContent(found.content);
           setCategory(found.category);
           setImageUri(found.imageUri);
-          if (found.latitude && found.longitude) {
+          if (hasValidCoordinates(found.latitude, found.longitude)) {
             setLocation({
-              latitude: found.latitude,
-              longitude: found.longitude,
+              latitude: found.latitude!,
+              longitude: found.longitude!,
             });
           }
         }
       });
     }
-  }, [id]);
+  }, [id, isNew]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -71,23 +82,29 @@ export default function NoteDetailScreen() {
   };
 
   const captureLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission Denied",
-        "Location permission is required to tag field notes.",
-      );
-      return;
+    if (locatingRef.current) return;
+    locatingRef.current = true;
+    setLocating(true);
+    const requestedId = id;
+    try {
+      const { position, cached } = await getDeviceLocation();
+      if (!mountedRef.current || routeIdRef.current !== requestedId) return;
+      setLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      Alert.alert("GPS attached", cached
+        ? "Using a recent location (at most 2 minutes old, accuracy within 100 m). Save the note to keep it."
+        : "Current coordinates attached. Save the note to keep them.");
+    } catch (error) {
+      if (mountedRef.current && routeIdRef.current === requestedId) {
+        Alert.alert("Unable to get GPS", error instanceof Error ? error.message : "Please try GPS again.");
+      }
+    } finally {
+      locatingRef.current = false;
+      if (mountedRef.current) setLocating(false);
     }
-    const loc = await Location.getCurrentPositionAsync({});
-    setLocation({
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-    });
-    Alert.alert("Success", "GPS coordinates attached.");
   };
 
   const handleSave = async () => {
+    if (locatingRef.current) return;
     if (!title.trim() || !content.trim()) {
       Alert.alert("Validation Error", "Title and content cannot be empty.");
       return;
@@ -157,9 +174,9 @@ export default function NoteDetailScreen() {
           <Ionicons name="camera" size={20} color="#007aff" />
           <Text style={styles.actionText}>Attach Photo</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={captureLocation}>
-          <Ionicons name="location" size={20} color="#007aff" />
-          <Text style={styles.actionText}>Tag GPS</Text>
+        <TouchableOpacity style={[styles.actionBtn, locating && styles.disabled]} onPress={captureLocation} disabled={locating} accessibilityRole="button" accessibilityState={{ disabled: locating, busy: locating }}>
+          {locating ? <ActivityIndicator color="#007aff" /> : <Ionicons name="location" size={20} color="#007aff" />}
+          <Text style={styles.actionText}>{locating ? "Getting GPS..." : "Tag GPS"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -172,7 +189,7 @@ export default function NoteDetailScreen() {
         </Text>
       )}
 
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+      <TouchableOpacity style={[styles.saveButton, locating && styles.disabled]} onPress={handleSave} disabled={locating}>
         <Text style={styles.saveButtonText}>Save Field Note</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -180,6 +197,7 @@ export default function NoteDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  disabled: { opacity: 0.5 },
   container: { flex: 1, backgroundColor: "#fff", padding: 16 },
   inputTitle: {
     fontSize: 22,

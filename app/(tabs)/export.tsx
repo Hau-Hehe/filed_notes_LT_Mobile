@@ -30,7 +30,7 @@ export default function ExportScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Daily Note Export</Text>
       <Text style={styles.subtitle}>
-        Export today's field notes into JSON or CSV report format for compliance
+        Export today&apos;s field notes into JSON or CSV report format for compliance
         and review.
       </Text>
       <TouchableOpacity

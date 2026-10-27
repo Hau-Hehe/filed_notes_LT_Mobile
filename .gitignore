@@ -4,3 +4,20 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Local dependencies, generated output and private credentials
+node_modules/
+.expo/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.p8
+*.pem

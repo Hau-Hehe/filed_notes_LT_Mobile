@@ -5,23 +5,19 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
+  ActivityIndicator,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
-import { router } from "expo-router";
+import { useSession } from "../../src/auth/SessionProvider";
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const { busy, error, retrySignOut, signIn, signOut } = useSession();
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert("Error", "Please enter both username and password.");
-      return;
-    }
-    await SecureStore.setItemAsync("user_token", "mock_jwt_token_1923050645");
-    await SecureStore.setItemAsync("username", username);
-    router.replace("/(tabs)");
+    if (busy) return;
+    await signIn(username, password);
+    setPassword("");
   };
 
   return (
@@ -35,6 +31,7 @@ export default function LoginScreen() {
         value={username}
         onChangeText={setUsername}
         accessibilityLabel="Username input"
+        editable={!busy}
       />
       <TextInput
         style={styles.input}
@@ -44,19 +41,33 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         accessibilityLabel="Password input"
+        editable={!busy}
       />
       <TouchableOpacity
         style={styles.button}
         onPress={handleLogin}
         accessibilityRole="button"
+        accessibilityLabel="Đăng nhập Field Notes"
+        accessibilityState={{ disabled: busy, busy }}
+        disabled={busy}
       >
-        <Text style={styles.buttonText}>Sign In</Text>
+        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
       </TouchableOpacity>
+      {error && (
+        <View>
+          <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
+          {retrySignOut && <TouchableOpacity style={styles.retry} accessibilityRole="button" accessibilityLabel="Thử xóa phiên đăng nhập lại" disabled={busy} onPress={() => { void signOut(); }}>
+            <Text>Thử xóa phiên lại</Text>
+          </TouchableOpacity>}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  error: { color: "#b00020", marginTop: 16 },
+  retry: { minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   container: {
     flex: 1,
     justifyContent: "center",
